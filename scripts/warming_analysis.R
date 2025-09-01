@@ -25,7 +25,7 @@ merge.easy <- function(df1,df2,key){
 
 # Load Data --------------------------------------------------------------------
 
-setwd("C:/Users/jlwei/Documents/permafrost_warming/data")
+setwd("~/permafrost_warming/data")
 
 load("warming_gRodon_predictions_ms_scaffolds.rda")
 pred_scaff <- pred_df %>%
