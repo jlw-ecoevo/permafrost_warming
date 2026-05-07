@@ -281,8 +281,8 @@ ra_cov_permafrost$id <- ra_cov_permafrost$fastq_id %>%
   gsub(pattern="_.*",replace="") %>%
   gsub(pattern="p",replace="") 
 
-median(ra_cov$RA[gsub("_.*","",ra_cov$fastq_id) %in% metagenome_df$ID])
-median(ra_cov_permafrost$RA[gsub("_.*","",ra_cov_permafrost$fastq_id) %in% metagenome_df$ID])
+# median(ra_cov$RA[gsub("_.*","",ra_cov$fastq_id) %in% metagenome_df$ID])
+# median(ra_cov_permafrost$RA[gsub("_.*","",ra_cov_permafrost$fastq_id) %in% metagenome_df$ID])
 
 ra_permafrost <- coverage[,c(grep("Relative.Abundance",names(coverage)))] 
 ra_permafrost <- t(t(ra_permafrost)/rowSums(t(ra_permafrost)))
@@ -362,6 +362,8 @@ abam_g_permafrost <- abam_permafrost %>%
 mC <- Mclust(permafrost$IoC,
              verbose=T)
 p <- (colSums(mC$z)/sum(mC$z))
+
+mclustBootstrapLRT(permafrost$IoC,modelName = "E",nboot=1e4)
 
 #Confidence limits
 c_l <- max(mC$data[mC$uncertainty<0.05 & mC$data<4])

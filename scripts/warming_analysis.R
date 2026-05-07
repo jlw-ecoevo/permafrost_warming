@@ -15,6 +15,8 @@ library(ggpubr)
 library(ggridges)
 library(ggcorrplot)
 library(corrplot)
+library(lme4)
+library(lmerTest)
 
 merge.easy <- function(df1,df2,key){
   df1 <- data.table(df1,key=key)
@@ -80,8 +82,11 @@ pC <- ggplot() +
            label="P(Oligotroph)>0.95",
            color="#7570B3") +
   scale_fill_manual(values=c("#1B9E77","#7570B3")) +
-  theme(legend.position = c(0.8,0.8))
+  theme(legend.position = c(0.8,0.5)) +
+  annotate("text",8,0.42,size=4,
+           label="Bootstrap Likelihood Ratio Test, p=0.009")
 pC
+#p-value calculation in warming_analysis_prep_data.R (LRT, 0.0089991)
 
 ## IoC By Phylum ----
 
@@ -150,11 +155,15 @@ relab <- ggplot(ram_g %>% subset(value.pre+value.post > 0),
   xlab("Index of Copiotrophy") +
   geom_vline(xintercept=c_h,lty=2,color="#1B9E77") +
   geom_vline(xintercept=c_l,lty=2,color="#7570B3") +
+  annotate("text",2.25,2.1,label="Pearson Correlation:",
+           size=4) +
   stat_cor(data=ram_g_permafrost %>% subset(value.pre+value.post > 0),
            label.y=1.95,
-           inherit.aes=F,aes(x=IoC,y=(value.post-value.pre))) +
+           inherit.aes=F,aes(x=IoC,y=(value.post-value.pre)),
+           size=4) +
   stat_cor(alpha=0.5,label.y=1.85,
-           inherit.aes=F,aes(x=IoC,y=(value.post-value.pre))) +
+           inherit.aes=F,aes(x=IoC,y=(value.post-value.pre)),
+           size=4) +
   guides(fill = guide_legend(override.aes = list(size = 5,alpha=1) ) )
 relab
 
@@ -205,7 +214,12 @@ pAbabBar <- ggarrange(ggplot(binom_df,
                         ylab("Proportion Decreased Absolute Abundance") +
                         xlab("") +
                         ylim(0,0.9) +
-                        scale_fill_brewer(palette="Dark2",direction=-1))
+                        scale_fill_brewer(palette="Dark2",direction=-1)) %>%
+  annotate_figure(fig.lab ="Chi-sq test, Chi-sq=42.18, p=4.2e-10",
+                  fig.lab.pos="top.left")
+
+chisq.test(table(abam_g$IoCc,Increased=abam_g$delta>0))
+
 
 ## Put it Together ----
 
@@ -225,8 +239,6 @@ ggarrange(ggarrange(pC,
           labels=c("","(d)"))
 dev.off()
 
-chisq.test(table(abam_g$IoCc,Increased=abam_g$delta>0))
-chisq.test(table(ram_g$IoCc,Increased=ram_g$delta>0))
 
 table(abam_g$IoCc,Increased=abam_g$delta>0)
 table(ram_g$IoCc,Increased=ram_g$delta>0)
@@ -277,8 +289,11 @@ pIoC <- ggplot() +
   geom_hline(yintercept=c_h,lty=2,color="#1B9E77") +
   geom_hline(yintercept=c_l,lty=2,color="#7570B3") +
   scale_fill_brewer(palette="Dark2",direction=-1) +
-  scale_color_brewer(palette="Dark2",direction=-1)
-pIoC
+  scale_color_brewer(palette="Dark2",direction=-1) 
+pIoC <- pIoC %>%
+  annotate_figure(top ="Paired t-test, t=3.83, df=12, p=2.4e-3")
+
+
 
 ## IoC Barplot ----
 
@@ -327,6 +342,8 @@ pMuMax <- ggplot() +
   xlab("") +
   labs(color="Permafrost\nCore",fill="Permafrost\nCore") +
   ylab("Avg. Maximum Growth Rate (1/Hours)") 
+pMuMax <- pMuMax  %>%
+  annotate_figure(top ="Paired t-test, t=5.55, df=12, p=1.2e-4")
 
 ## Carbon Plot 
 
@@ -350,13 +367,14 @@ x.post <- x.paired %>% subset(pre_post_thaw=="post")
 x.post$diff <- 100*(x.paired[x.paired$pre_post_thaw=="pre",]$d - 
   x.paired[x.paired$pre_post_thaw=="post",]$d)/x.paired[x.paired$pre_post_thaw=="pre",]$d
 
-t.test(log(2)/x.paired[x.paired$pre_post_thaw=="pre",]$d,
-       log(2)/x.paired[x.paired$pre_post_thaw=="post",]$d,
+t.test(log(2)/x.paired[x.paired$pre_post_thaw=="post",]$d,
+       log(2)/x.paired[x.paired$pre_post_thaw=="pre",]$d,
        paired=T)
 
-t.test(x.paired[x.paired$pre_post_thaw=="pre",]$IoC,
-       x.paired[x.paired$pre_post_thaw=="post",]$IoC,
+t.test(x.paired[x.paired$pre_post_thaw=="post",]$IoC,
+       x.paired[x.paired$pre_post_thaw=="pre",]$IoC,
        paired=T)
+
 
 pCarbon <- ggplot(x.post,
                   aes(x=carbon_percent,y=-diff,fill=core,group=core)) +
@@ -371,7 +389,26 @@ pCarbon <- ggplot(x.post,
   ylab("% Change in Min. Doubling Time Over Experiment") +
   xlab("Organic C at Start of Experiment (%)") +
   theme(legend.position = "right") +
-  geom_hline(yintercept=0,lty=2)
+  geom_hline(yintercept=0,lty=2) +
+  annotate("text",
+           18,10,
+           label="Linear Mixed Effects Model",
+           size=3) +
+  annotate("text",
+           18,7,
+           label=expression(Delta*"DT ~ %C + (1|Core)"),
+           parse=T,
+           size=3) +
+  annotate("text",
+           18,4,
+           label=expression(beta["%C"]*"=0.67, df=11, p=0.015"),
+           parse=T,
+           size=3)
+pCarbon
+
+
+lmer((-diff)~(carbon_percent) + (1 | core), 
+     data = x.post) %>% summary()
 
 ## Density IoC ----
 
@@ -394,8 +431,14 @@ pMdense <- ggplot(mag_df,
   scale_fill_brewer(palette = "Accent") +
   labs(fill="Thaw",color="Thaw") +
   xlab("Index of Copiotrophy") +
-  ylab("Density")
+  ylab("Density") +
+  annotate("text",
+           7.5,0.4,
+           label="Welch's t-test\nt=2.13, df=29.80, p=0.041",
+           size=4)
 pMdense 
+
+t.test(IoC~pre_post_thaw,data=metagenome_df)
 
 ## Put it Together ----
 
@@ -483,6 +526,13 @@ relab <- ggplot(ram_g %>% subset(value.pre+value.post > 0),
   geom_vline(xintercept=c_h,lty=2) +
   geom_vline(xintercept=c_l,lty=2,lwd=1.2) +
   guides(fill = guide_legend(override.aes = list(size = 5,alpha=1) ) )
+relab <- relab %>%
+  annotate_figure(top="Pearson Correlation, r=0.36, t=8.97, df=531, p=5.03e-18")
+
+cor_x <- ram_g$IoC[ram_g$value.pre+ram_g$value.post > 0]
+cor_y <- ram_g$value.post[ram_g$value.pre+ram_g$value.post > 0]-
+  ram_g$value.pre[ram_g$value.pre+ram_g$value.post > 0]
+cor.test(cor_x,cor_y)
 
 ## Relative Abundance Boxplots ----
 
@@ -517,9 +567,15 @@ relab_h2  <- relab_h + geom_segment(data=dat, aes(x=xmin, xend=xmax,
                                     size=1,lty=1) +
   theme(axis.text.x = element_text(angle = 45, hjust=1)) +
   geom_hline(yintercept=0,lty=2) + 
-  stat_pwc() + 
-  stat_anova_test(label.y=2.75,
-                  label.x=1.1)
+  stat_pwc() 
+
+
+relab_h2 <- relab_h2 %>%
+  annotate_figure(top="One-Way ANOVA, F=42.06, df=2,230, p=1.11e-17")
+
+aov((value.post-value.pre)~IoCc,
+    data=ram_g %>% subset(value.pre+value.post > 0)) %>%
+  summary()
 
 ## Absolute Abundance ----
 
@@ -534,13 +590,19 @@ abab <- ggplot(abam_g,
                aes(x=IoC,y=(deltarel+1)/2,fill=IoCc)) +
   geom_point(alpha=.5,size=5,pch=21) +
   geom_hline(yintercept = 0.5,lty=2) +
-  geom_smooth(method="glm",method.args=list(family="binomial"),color="black",fill="black") +
+  geom_smooth(method="glm",method.args=list(family="quasibinomial"),color="black",fill="black") +
   scale_fill_brewer(palette="Dark2",direction=-1) +
   theme_pubclean(base_size = 10)+
   labs(fill="") +
   theme(legend.position = "none") +
   ylab("Rel. Change in Absolute Abundance: ((Start-End)/(Start+End)+1)/2") +
   xlab("Index of Copiotrophy")
+
+abab <- abab %>%
+  annotate_figure(top="Logistic Regression, Quasibinomial Family, Logit Link, beta=0.34, p=4.73e-11")
+
+glm((deltarel+1)/2 ~ IoC, data=abam_g, family = quasibinomial()) %>%
+  summary()
 
 ## Absolute Abundance Barplots ----
 
@@ -577,21 +639,28 @@ pAbabBar <- ggarrange(ggplot(binom_df,
                         ylim(0,0.9) +
                         scale_fill_brewer(palette="Dark2",direction=-1))
 
+pAbabBar <- pAbabBar %>%
+  annotate_figure(fig.lab ="Chi-sq test, Chi-sq=42.18, p=4.2e-10",
+                  fig.lab.pos="top.left")
+
+chisq.test(table(abam_g$IoCc,Increased=abam_g$delta>0))
+
+
 ## Put it Together ----
 
-png("../figures/SFigure_AbsoluteAb.png",width=200,height=250,units="mm",res=1000)
+png("../figures/SFigure_AbsoluteAb.png",width=250,height=250,units="mm",res=1000)
 ggarrange(ggarrange(relab,
                     relab_h2,
                     ncol=2,
                     labels=c("(a)","(b)"),
                     hjust=0,
-                    widths=c(3,1)),
+                    widths=c(3,2)),
           ggarrange(abab,
                     pAbabBar,
                     ncol=2,
                     labels=c("(c)","(d)"),
                     hjust=0,
-                    widths=c(3,2)),
+                    widths=c(9,4)),
           nrow=2)
 dev.off()
 
@@ -599,6 +668,9 @@ dev.off()
 # MuMax  -----------------------------------------------------------------------
 ################################################################################
 
+abam_g$mu <- (log(2)/abam_g$d)
+ram_g$mu <- (log(2)/ram_g$d)
+ram_g$diff <- (ram_g$value.post-ram_g$value.pre)
 
 pMuRel <- ggplot(ram_g %>% subset(value.pre+value.post > 0),
        aes(x=log(2)/d,y=(value.post-value.pre))) +
@@ -616,6 +688,13 @@ pMuRel <- ggplot(ram_g %>% subset(value.pre+value.post > 0),
   xlab("Predicted Max. Growth Rate") +
   scale_x_log10()
 
+pMuRel <- pMuRel %>%
+  annotate_figure(top=text_grob("Pearson Correlation, t=5.86, df=531, p=8.30e-9",size=8))
+
+cor.test(ram_g$mu[ram_g$value.pre+ram_g$value.post > 0],
+         ram_g$diff[ram_g$value.pre+ram_g$value.post > 0])
+
+
 pMuAb <- ggplot(abam_g,
        aes(x=log(2)/d,y=(deltarel+1)/2)) +
   geom_point(alpha=.5,size=2,pch=19) +
@@ -629,8 +708,14 @@ pMuAb <- ggplot(abam_g,
   xlab("Predicted Max. Growth Rate") +
   scale_x_log10()
 
+pMuAb <- pMuAb %>%
+  annotate_figure(top=text_grob("Logistic Regression, Quasibinomial Family, Logit Link, beta=18.35, p=5.60e-38",size=8))
+
+glm((deltarel+1)/2 ~ mu, data=abam_g, family = quasibinomial()) %>%
+  summary()
+
 png("../figures/SFigure_mumax.png",width=200,height=100,units="mm",res=1000)
-ggarrange(pMuRel,pMuAb,ncol=2,labels=c("(a)","(b)"))
+ggarrange(pMuRel,pMuAb,ncol=2,labels=c("(a)","(b)"),hjust=0,vjust=2)
 dev.off()
 
 ################################################################################
@@ -650,6 +735,8 @@ pIoC <- ggplot(mag_df,aes(x=-dCUB,y=nCAZy,fill=IoCc,size=nGenes)) +
   ylab("Number of CAZymes") +
   xlab("Codon Usage Bias (-dCUB)") + 
   guides(fill = guide_legend(override.aes = list(size=5)))
+pIoC
+
 
 ## Source Breakdown ----
 
@@ -665,6 +752,7 @@ pSource <- ggplot(mag_df,aes(x=-dCUB,y=nCAZy,fill=Source,size=nGenes)) +
   xlab("Codon Usage Bias (-dCUB)") + 
   guides(fill = guide_legend(override.aes = list(size=5))) +
   facet_wrap(~Source)
+pSOurce
 
 ## Correlation between components ----
 
@@ -679,7 +767,7 @@ Mp <- cor.mtest(x,conf.level=0.99)
 
 pCor <- ggarrange(ggcorrplot(M, hc.order = TRUE,
                              type = "lower", 
-                             p.mat = Mp$p,lab=T),
+                             lab=T),
                   ggplot(x,
                          aes(x=NumGenes,y=RelNumCAZymes)) +
                     geom_point() +
@@ -688,7 +776,8 @@ pCor <- ggarrange(ggcorrplot(M, hc.order = TRUE,
                     geom_smooth(method="lm") +
                     ylab("Rel. # CAZy") +
                     xlab("# Genes") +
-                    theme_pubclean(),
+                    theme_pubclean() +
+                    stat_cor(),
                   ncol=2,
                   labels=c("(c)","(d)"),
                   hjust = 0)
@@ -756,6 +845,7 @@ rel50 <- ggplot(ram_g %>%
   stat_cor(inherit.aes=F,aes(x=IoC,y=(value.post-value.pre))) +
   ggtitle(">50% Completeness") 
 
+
 binom50_df <- as.data.frame(table(abam_g$IoCc[abam_g$Genome %in% complete_50],
                                 Increased=abam_g$delta[abam_g$Genome %in% complete_50]>0)) %>%
   group_by(Var1) %>%
@@ -789,6 +879,13 @@ ab50 <- ggarrange(ggplot(binom50_df,
                         xlab("") +
                         ylim(0,1) +
                         scale_fill_brewer(palette="Dark2",direction=-1))
+
+ab50 <- ab50 %>%
+  annotate_figure(fig.lab ="Chi-sq test, Chi-sq=41.81, p=8.36e-10",
+                  fig.lab.pos="top.left")
+
+chisq.test(table(abam_g$IoCc[abam_g$Genome %in% complete_50],
+                 Increased=abam_g$delta[abam_g$Genome %in% complete_50]>0))
 
 
 ## 90% Completeness ----
@@ -850,6 +947,13 @@ ab90 <- ggarrange(ggplot(binom90_df,
                     ylim(0,1) +
                     scale_fill_brewer(palette="Dark2",direction=-1))
 
+ab90 <- ab90 %>%
+  annotate_figure(fig.lab ="Chi-sq test, Chi-sq=29.83, p=3.33e-7",
+                  fig.lab.pos="top.left")
+
+chisq.test(table(abam_g$IoCc[abam_g$Genome %in% complete_90],
+                 Increased=abam_g$delta[abam_g$Genome %in% complete_90]>0))
+
 ## Put it Together ----
 
 png("../figures/SFigure_completeness.png",width=200,height=250,units="mm",res=1000)
@@ -903,7 +1007,24 @@ pCioc <- ggplot(x,
   theme(legend.position = "right") +
   labs(shape="Thaw",color="Permafrost\nCore",fill="Permafrost\nCore") +
   ylab("Avg. Index of Copiotrophy") +
-  xlab("Organic C at Start of Experiment (%)")
+  xlab("Organic C at Start of Experiment (%)")  +
+  annotate("text",
+           10,5.25,
+           label="Linear Mixed Effects Model",
+           size=3) +
+  annotate("text",
+           10,5.1,
+           label="IoC ~ %C + Thaw + (1|Core)",
+           size=3) +
+  annotate("text",
+           10,4.95,
+           label=expression(beta["%C"]*"=0.04, df=3.61, p=0.031"),
+           parse=T,
+           size=3)
+
+
+lmer(IoC~(carbon_percent) + (1 | core)+pre_post_thaw, 
+     data = x) %>% summary()
 
 pCmu <- ggplot(x,
        aes(x=carbon_percent,
@@ -923,7 +1044,24 @@ pCmu <- ggplot(x,
   labs(shape="Thaw",color="Permafrost\nCore",fill="Permafrost\nCore") +
   ylab("Index of Copiotrophy") +
   xlab("Organic C at Start of Experiment (%)") +
-  ylab("Predicted Avg. Maximum Growth Rate")
+  ylab("Predicted Avg. Maximum Growth Rate") +
+  annotate("text",
+           25,0.055,
+           label="Linear Mixed Effects Model",
+           size=3) +
+  annotate("text",
+           25,0.05,
+           label=expression(mu["max"]*" ~ %C + Thaw + (1|Core)"),
+           parse=T,
+           size=3) +
+  annotate("text",
+           25,0.045,
+           label=expression(beta["%C"]*"=9.48e-4, df=3.36, p=0.051"),
+           parse=T,
+           size=3)
+
+lmer((log(2)/d)~(carbon_percent) + (1 | core)+pre_post_thaw, 
+     data = x) %>% summary()
 
 png("../figures/SFigure_carbon.png",width=220,height=100,units="mm",res=1000)
 ggarrange(pCmu,pCioc,ncol=2,widths=c(3,4),labels=c("(a)","(b)"),hjust=0)
@@ -957,7 +1095,7 @@ ram$IoCc <- factor(ram$IoCc,
                      levels=c("Oligotroph",
                               "Undefined",
                               "Copiotroph"))
-png("../figures/SFigure_by_id.png",width=200,height=250,units="mm",res=1000)
+png("../figures/SFigure_by_core.png",width=200,height=250,units="mm",res=1000)
 ggplot(ram %>% subset(delta!=0),
        aes(x=IoCc,
            y=delta,
@@ -977,10 +1115,11 @@ ggplot(ram %>% subset(delta!=0),
   ylab("Avg. Change in Transformed Rel. Abundance") +
   xlab("") +
   guides(fill = guide_legend(override.aes = list(size = 5,alpha=1) ) ) +
-  facet_wrap(~id) +
+  facet_wrap(~core) +
   stat_anova_test() +
   theme(legend.position = "right",
-        axis.text.x = element_text(angle = 60,hjust=1))
+        axis.text.x = element_text(angle = 60,hjust=1)) +
+  stat_pwc()
 dev.off()
 
 
@@ -1001,7 +1140,7 @@ ggplot(ram %>% subset(delta!=0),
         legend.box.background = element_rect(colour = "black"),
         legend.title = element_blank()) +
   guides(fill = guide_legend(override.aes = list(size = 5,alpha=1) ) ) +
-  facet_wrap(~id) +
+  facet_wrap(~as.numeric(id)) +
   geom_abline(slope=1,intercept=0,lty=2) +
   xlab("Transformed Relative Abundance Pre Thaw") +
   ylab("Transformed Relative Abundance Post Thaw") +
@@ -1035,7 +1174,7 @@ ggplot(abam %>% subset(delta!=0),
         legend.box.background = element_rect(colour = "black"),
         legend.title = element_blank()) +
   guides(fill = guide_legend(override.aes = list(size = 5,alpha=1) ) ) +
-  facet_wrap(~id) +
+  facet_wrap(~as.numeric(id)) +
   geom_abline(slope=1,intercept=0,lty=2) +
   scale_x_log10() +
   scale_y_log10() +
@@ -1084,7 +1223,8 @@ ggplot(ram_gp %>% subset(delta!=0),
   theme_bw() +
   stat_anova_test() +
   theme(legend.position = "right",
-        axis.text.x = element_text(angle = 60,hjust=1))
+        axis.text.x = element_text(angle = 60,hjust=1)) +
+  stat_pwc()
 dev.off()
 
 
@@ -1163,7 +1303,11 @@ pBloom <- ggarrange(ggplot(bloom_df,
             ylab("Proportion \"Crashers\" (Undetected Post-Thaw)") +
             xlab("") +
             ylim(0,0.75) +
-            scale_fill_brewer(palette="Dark2",direction=-1))
+            scale_fill_brewer(palette="Dark2",direction=-1))%>%
+  annotate_figure(fig.lab ="Chi-sq test, Chi-sq=172.68, p=2.79e-36",
+                  fig.lab.pos="top.left")
+
+chisq.test(table(mag_dist$IoCc,Increased=mag_dist$bloomer))$p.value
 
 
 pNumDist <- ggplot(mag_dist,
@@ -1174,7 +1318,23 @@ pNumDist <- ggplot(mag_dist,
   scale_color_brewer(palette="Dark2",direction=-1) +
   theme_pubclean(base_size = 12) +
   theme(legend.position = "right") +
-  xlab("No. Samples With Non-Zero Abundance") 
+  xlab("No. Samples With Non-Zero Abundance") +
+  annotate("text",20,0.11,
+           label="Wilcoxon Rank Sum Test, Copiotroph vs. Oligotroph, w=5155, p=1.07e-7")+
+  annotate("text",20,0.095,
+           label="Wilcoxon Rank Sum Test, Copiotroph vs. Undefined, w=4309.5, p=0.024")+
+  annotate("text",20,0.08,
+           label="Wilcoxon Rank Sum Test, Undefined vs. Oligotroph, w=18895, p=6.76e-7")
+
+tot_c <- mag_dist$pre_thaw[mag_dist$IoCc=="Copiotroph"] +
+  mag_dist$post_thaw[mag_dist$IoCc=="Copiotroph"]
+tot_o <- mag_dist$pre_thaw[mag_dist$IoCc=="Oligotroph"] +
+  mag_dist$post_thaw[mag_dist$IoCc=="Oligotroph"]
+tot_u <- mag_dist$pre_thaw[mag_dist$IoCc=="Undefined"] +
+  mag_dist$post_thaw[mag_dist$IoCc=="Undefined"]
+wilcox.test(tot_c,tot_o)
+wilcox.test(tot_c,tot_u)
+wilcox.test(tot_u,tot_o)
 
 
 pNumBar <- ggplot(bloom_df, 
@@ -1228,6 +1388,7 @@ dev.off()
 metagenome_df <- metagenome_df %>% subset(gbp>=1)
 b <- runif(nrow(metagenome_df), -0.1, 0.1) #same jitter for both violin plots
 
+
 ## IoC Metagenomes ----
 
 
@@ -1247,7 +1408,7 @@ pIoC <- ggplot() +
                  x=as.numeric(pre_post_thaw=="post")+b,
                  group=id,
                  size=gbp,
-                 shape=gbp<5,
+                 shape=gbp<1,
                  color=IoCc),
              alpha=0.75) +
   geom_line(data=metagenome_df,aes(y=IoC,x=as.numeric(pre_post_thaw=="post")+b,
@@ -1260,15 +1421,18 @@ pIoC <- ggplot() +
   scale_size_continuous(breaks=c(1,10),limits = c(0.1,35),range=c(3,10)) +
   scale_shape_discrete(solid=T) +
   xlab("") +
-  labs(color="",fill="",size="Gbp",shape="<5 Gbp") +
+  labs(color="",fill="",size="Gbp",shape="<1 Gbp") +
   ylab("Avg. Index of Copiotrophy") +
   theme(legend.position = "right",
         axis.text.x = element_text(angle = 60,hjust=1)) +
   geom_hline(yintercept=c_h,lty=2,color="#1B9E77") +
   geom_hline(yintercept=c_l,lty=2,color="#7570B3") +
   scale_fill_brewer(palette="Dark2",direction=-1) +
-  scale_color_brewer(palette="Dark2",direction=-1)
-pIoC
+  scale_color_brewer(palette="Dark2",direction=-1) 
+pIoC <- pIoC %>%
+  annotate_figure(top ="Paired t-test, t=4.70, df=8, p=1.54e-3")
+
+
 
 ## IoC Barplot ----
 
@@ -1287,7 +1451,6 @@ pIoCbar <- ggplot(ioc_metagenomes,
   scale_x_discrete(labels=c("Pre-Thaw","Post-Thaw")) +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 60,hjust=1))
-pIoCbar
 
 ## MuMax Metagenome ----
 
@@ -1301,7 +1464,7 @@ pMuMax <- ggplot() +
                                     x=as.numeric(pre_post_thaw=="post")+b,
                                     group=id,
                                     size=gbp,
-                                    shape=gbp<5,
+                                    shape=gbp<1,
                                     color=core),
              alpha=0.75) +
   geom_line(data=metagenome_df,aes(y=log(2)/d,x=as.numeric(pre_post_thaw=="post")+b,
@@ -1318,7 +1481,8 @@ pMuMax <- ggplot() +
   xlab("") +
   labs(color="Permafrost\nCore",fill="Permafrost\nCore") +
   ylab("Avg. Maximum Growth Rate (1/Hours)") 
-pMuMax
+pMuMax <- pMuMax  %>%
+  annotate_figure(top ="Paired t-test, t=4.53, df=8, p=1.91e-3")
 
 ## Carbon Plot 
 
@@ -1342,13 +1506,14 @@ x.post <- x.paired %>% subset(pre_post_thaw=="post")
 x.post$diff <- 100*(x.paired[x.paired$pre_post_thaw=="pre",]$d - 
                       x.paired[x.paired$pre_post_thaw=="post",]$d)/x.paired[x.paired$pre_post_thaw=="pre",]$d
 
-t.test(log(2)/x.paired[x.paired$pre_post_thaw=="pre",]$d,
-       log(2)/x.paired[x.paired$pre_post_thaw=="post",]$d,
+t.test(log(2)/x.paired[x.paired$pre_post_thaw=="post",]$d,
+       log(2)/x.paired[x.paired$pre_post_thaw=="pre",]$d,
        paired=T)
 
-t.test(x.paired[x.paired$pre_post_thaw=="pre",]$IoC,
-       x.paired[x.paired$pre_post_thaw=="post",]$IoC,
+t.test(x.paired[x.paired$pre_post_thaw=="post",]$IoC,
+       x.paired[x.paired$pre_post_thaw=="pre",]$IoC,
        paired=T)
+
 
 pCarbon <- ggplot(x.post,
                   aes(x=carbon_percent,y=-diff,fill=core,group=core)) +
@@ -1363,7 +1528,26 @@ pCarbon <- ggplot(x.post,
   ylab("% Change in Min. Doubling Time Over Experiment") +
   xlab("Organic C at Start of Experiment (%)") +
   theme(legend.position = "right") +
-  geom_hline(yintercept=0,lty=2)
+  geom_hline(yintercept=0,lty=2) +
+  annotate("text",
+           18,10,
+           label="Linear Mixed Effects Model",
+           size=3) +
+  annotate("text",
+           18,7,
+           label=expression(Delta*"DT ~ %C + (1|Core)"),
+           parse=T,
+           size=3) +
+  annotate("text",
+           18,4,
+           label=expression(beta["%C"]*"=0.81, df=7, p=0.011"),
+           parse=T,
+           size=3)
+pCarbon
+
+
+lmer((-diff)~(carbon_percent) + (1 | core), 
+     data = x.post) %>% summary()
 
 ## Density IoC ----
 
@@ -1386,8 +1570,14 @@ pMdense <- ggplot(mag_df,
   scale_fill_brewer(palette = "Accent") +
   labs(fill="Thaw",color="Thaw") +
   xlab("Index of Copiotrophy") +
-  ylab("Density")
+  ylab("Density") +
+  annotate("text",
+           7.5,0.4,
+           label="Welch's t-test\nt=2.09, df=26.49, p=0.046",
+           size=4)
 pMdense 
+
+t.test(IoC~pre_post_thaw,data=metagenome_df)
 
 ## Put it Together ----
 
@@ -1407,13 +1597,90 @@ ggarrange(ggarrange(pMuMax,
           nrow=2)
 dev.off()
 
+################################################################################
+# 16S Copy Number Variation ----------------------------------------------------
+################################################################################
+
+abam_g$delta_upper <- abam_g$Absolute_16S_copy_gsoil.post/10-abam_g$Absolute_16S_copy_gsoil.pre
+abam_g$deltarel_upper <- (abam_g$Absolute_16S_copy_gsoil.post/10-abam_g$Absolute_16S_copy_gsoil.pre)/(abam_g$Absolute_16S_copy_gsoil.post/10+abam_g$Absolute_16S_copy_gsoil.pre)
+
+## Absolute Abundance ----
+
+abam_g$IoCc <- "Oligotroph"
+abam_g$IoCc[abam_g$IoC>c_l] <- "Undefined"
+abam_g$IoCc[abam_g$IoC>c_h] <- "Copiotroph"
+abam_g$IoCc <- factor(abam_g$IoCc,
+                      levels=c("Oligotroph",
+                               "Undefined",
+                               "Copiotroph"))
+ababUpper <- ggplot(abam_g,
+               aes(x=IoC,y=(deltarel_upper+1)/2,fill=IoCc)) +
+  geom_point(alpha=.5,size=5,pch=21) +
+  geom_hline(yintercept = 0.5,lty=2) +
+  geom_smooth(method="glm",method.args=list(family="quasibinomial"),color="black",fill="black") +
+  scale_fill_brewer(palette="Dark2",direction=-1) +
+  theme_pubclean(base_size = 10)+
+  labs(fill="") +
+  theme(legend.position = "left") +
+  ylab("Rel. Change in Absolute Abundance: ((S-E)/(S+E)+1)/2") +
+  xlab("Index of Copiotrophy")
+
+ababUpper <- ababUpper %>%
+  annotate_figure(top="Logistic Regression, Quasibinomial Family, Logit Link, beta=0.81, p=9.75e-24")
+
+glm((deltarel_upper+1)/2 ~ IoC, data=abam_g, family = quasibinomial()) %>%
+  summary()
+
+## Absolute Abundance Barplots ----
+
+binomUpper_df <- as.data.frame(table(abam_g$IoCc,Increased=abam_g$delta_upper>0)) %>%
+  group_by(Var1) %>%
+  summarise(n=sum(Freq),
+            xI=sum(Freq[Increased=="TRUE"]),
+            xD=sum(Freq[Increased=="FALSE"])) %>%
+  mutate(pI=xI/n,pD=xD/n)
+binomUpper_df$LowerI <- mapply(FUN=binom.test,binomUpper_df$xI,binom_df$n)["conf.int",] %>% lapply("[",1) %>% unlist()
+binomUpper_df$UpperI <- mapply(FUN=binom.test,binomUpper_df$xI,binom_df$n)["conf.int",] %>% lapply("[",2) %>% unlist()
+binomUpper_df$LowerD <- mapply(FUN=binom.test,binomUpper_df$xD,binom_df$n)["conf.int",] %>% lapply("[",1) %>% unlist()
+binomUpper_df$UpperD <- mapply(FUN=binom.test,binomUpper_df$xD,binom_df$n)["conf.int",] %>% lapply("[",2) %>% unlist()
+pAbabBarUpper <- ggarrange(ggplot(binomUpper_df, 
+                                  aes(x=Var1, y = pI, fill=Var1)) + 
+                             geom_bar(stat="identity") +
+                             geom_errorbar(aes(ymin=LowerI,ymax=UpperI,width=0.2)) +
+                             theme_pubclean(base_size = bs) +
+                             theme(legend.position = "none",
+                                   axis.text.x = element_text(angle = 60,hjust=1)) +
+                             ylab("Proportion Increased Absolute Abundance") +
+                             xlab("") +
+                             ylim(0,1) +
+                             scale_fill_brewer(palette="Dark2",direction=-1),
+                           ggplot(binomUpper_df, 
+                                  aes(x=Var1, y = pD, fill=Var1)) + 
+                             geom_bar(stat="identity") +
+                             geom_errorbar(aes(ymin=LowerD,ymax=UpperD,width=0.2)) +
+                             theme_pubclean(base_size = bs) +
+                             theme(legend.position = "none",
+                                   axis.text.x = element_text(angle = 60,hjust=1)) +
+                             ylab("Proportion Decreased Absolute Abundance") +
+                             xlab("") +
+                             ylim(0,1) +
+                             scale_fill_brewer(palette="Dark2",direction=-1))
+
+pAbabBarUpper <- pAbabBarUpper %>%
+  annotate_figure(fig.lab ="Chi-sq test, Chi-sq=113.84, p=1.90e-25",
+                  fig.lab.pos="top.left")
+
+chisq.test(table(abam_g$IoCc,Increased=abam_g$delta_upper>0))
 
 
-
-
-
-
-
+png("../figures/SFigure_abab_upper.png",width=300,height=150,units="mm",res=1000)
+ggarrange(ababUpper,
+          pAbabBarUpper,
+          labels=c("(a)","(b)"),
+          ncol=2,
+          hjust=0,
+          widths = c(2,1))
+dev.off()
 
 
 
